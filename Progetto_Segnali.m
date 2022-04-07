@@ -13,7 +13,6 @@ column  = ["data", "denominazione_regione", "denominazione_provincia", "lat", "l
 data_filt = rmmissing(data(:,column));
 data_filt = data_filt(string(data_filt.denominazione_regione) ~= 'Sardegna',:);
 
-
 x_coord = data_filt(1:num_province,:).long;
 y_coord = data_filt(1:num_province,:).lat;
 
@@ -83,7 +82,7 @@ h = [ones(num_province-numb_filt,1) ; zeros(numb_filt,1)];
 
 s_filt = U * diag(h) * U.' * s;
 
-xlabel('eigenvalues');ylabel('coefficient');
+xlabel('nodi');ylabel('infetti');
 figure;gsp_plot_signal(G,s_filt,param);title('Totale nuovi casi filtrati');
 
 difference = s - s_filt;
@@ -110,7 +109,7 @@ s_filt1 = H * s;
 toc
 error = ones(num_province,1).' * abs(s_filt1 - s_filt)
 
-xlabel('eigenvalues');ylabel('coefficient');
+xlabel('nodi');ylabel('infetti');
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% simulation of distribuited computation of approximated filter H
