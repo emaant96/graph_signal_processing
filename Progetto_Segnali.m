@@ -1,7 +1,7 @@
 
 clear
 clc
-tol = 1e-10;
+tol = 1e-15;
 % RAW_REF url = 'https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv';
 % REF https://github.com/pcm-dpc/COVID-19/blob/master/dati-province/dpc-covid19-ita-province-latest.csv
 run gspbox/gsp_start
@@ -64,7 +64,8 @@ L = diag(d) - A;
 
 [U,v] = eig(L);
 v = diag(v);
-
+U(abs(U) < tol) = 0;
+v(abs(v) < tol) = 0;
 %% computation Frequency Profile on Graph (GFT)
 
 f = U.' * s;
@@ -107,8 +108,8 @@ end
 
 s_filt1 = H * s;
 toc
-error = sum(abs(s_filt1 - s_filt))
-
+error = sum(abs(s_filt1 - s_filt));
+disp("error computation approximated with Laplacian Matrix powers: " + string(error))
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% simulation of distribuited computation of approximated filter H
@@ -146,36 +147,35 @@ for n = 1:length(alpha)
 end
 toc
 
-error = sum(abs(s_filt2 - s_filt))
+error = sum(abs(s_filt2 - s_filt));
+disp("error distribuited calc approximation: " + string(error))
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% sampling and reconstruction
 
-Ds = zeros(length(s));
-freq_camp = 2;
+ds = ones(length(s),1);
+freq_camp = 80;
 
 for i = 1:num_nodi
     if (mod(i,freq_camp) == 0)
-        Ds(i,i) = 1;
+        ds(i) = 0;
     end
 end
 
-s_camp = Ds*s;
-f = U.'*s_camp;
-figure;plot(f,'r-');ylim([-20,80])
-xlabel('eigenvalues');ylabel('coefficient');
-title('Graph Frequency profile');
+s_camp = diag(ds)*s_filt;
 
+Ef = diag(h);
 Bf = U*Ef*U.';
-Bf(abs(Bf) < tol) = 0;
-e = eig(Bf*Ds*Bf);
-if(max(e) - 1 < tol)
+
+e = eig(Bf*diag(ds)*Bf);
+e(abs(e) < tol) = 0;
+if(max(e) - 1 < tol*10)
     disp("signal on graph is both vertex and frequency limited")
 end
 
 % Sampling Theorem
 
-cDs = I - Ds;
+cDs = I - diag(ds);
 
 eigv = eig(cDs*Bf);
 sqrt(max(eigv))
