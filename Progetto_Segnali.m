@@ -151,7 +151,36 @@ error = ones(num_province,1).' * abs(s_filt2 - s_filt)
 xlabel('nodi');ylabel('variazione infetti');
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
+%% sampling and reconstruction
 
+Ds = zeros(length(s));
+freq_camp = 2;
+
+for i = 1:num_province
+    if (mod(i,freq_camp) == 0)
+        Ds(i,i) = 1;
+    end
+end
+
+s_camp = Ds*s;
+f = U.'*s_camp;
+figure;plot(f,'r-');ylim([-20,80])
+xlabel('eigenvalues');ylabel('coefficient');
+title('Graph Frequency profile');
+
+Bf = U*Ef*U.';
+Bf(abs(Bf) < 1e-10) = 0;
+e = eig(Bf*Ds*Bf);
+if(max(e) - 1 < 1e-10)
+    disp("signal on graph is both vertex and frequency limited")
+end
+
+% Sampling Theorem
+
+cDs = I - Ds;
+
+eigv = eig(cDs*Bf);
+sqrt(max(eigv))
 
 
 
