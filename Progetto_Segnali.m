@@ -77,7 +77,7 @@ title('Graph Frequency profile');
 
 %% filtering
 
-numb_filt = 55;
+numb_filt = 60;
 h = [ones(num_nodi-numb_filt,1) ; zeros(numb_filt,1)];
 
 %% direct computation of H from eigenvectors
@@ -110,7 +110,7 @@ end
 s_filt1 = H * s;
 toc
 error = sum(abs(s_filt1 - s_filt));
-disp("error computation approximated with Laplacian Matrix powers: " + string(error))
+disp("error computation approximated of filter with Laplacian Matrix powers: " + string(error))
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% simulation of distribuited computation of approximated filter H
@@ -149,7 +149,7 @@ end
 toc
 
 error = sum(abs(s_filt2 - s_filt));
-disp("error distribuited calc approximation: " + string(error))
+disp("error distribuited calc approximation of filter: " + string(error))
 figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% sampling and reconstruction
@@ -179,11 +179,38 @@ for i = 1:length(h)
 end
 Uf = U*Pf';
 s_interp = Uf*((Uf'*diag(ds)*Uf)\Uf')*s_camp;
-sum(abs(s_filt - s_interp))
+error = sum(abs(s_filt - s_interp));
+disp("error interpolation pseudoinverse approch: " + string(error))
+%% iterative version
+
+s_interp1 = s_camp;
+for p = 1:100000
+    s_interp1 = s_camp + cDs*Bf*s_interp1;
+end
+error = sum(abs(s_filt - s_interp1));
+disp("error interpolation iterative version algoritm approximation: " + string(error))
+%% reconstruction with eigenvector and eigenvalue of BDB
+
+[U1,v1] = eig(Bf*diag(ds)*Bf);
+v1 = diag(v1);
+U1(abs(U1) < tol*100000000) = 0;
+v1(abs(v1) < tol*100000000) = 0;
+s_interp2 = zeros(length(s),1);
+
+for i = 1:length(v1)
+    if(v1(i) ~= 0)
+        s_interp2 = s_interp2 + (s_camp'*U1(:,i)/v1(i))*U1(:,i);
+    end
+end
+
+error = sum(abs(s_filt - s_interp2));
+disp("error interpolation eigenvector and eigenvalue of BDB approximation: " + string(error))
+
+%% print error for privinces
 figure;gsp_plot_signal(G,s_interp);title('Totale nuovi casi filtrati filtro approssimato')
 difference = s - s_interp;
 figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale campionato/ricostruto e segnale originale');
-errore_medio = (abs(s-s_interp)./s)*100;
+errore_medio = abs(s-s_interp);
 [v,idx] = maxk(errore_medio,10);
 v
 interest_cases(idx,:).denominazione_provincia
