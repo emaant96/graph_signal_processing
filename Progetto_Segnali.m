@@ -37,7 +37,7 @@ for i = 1:num_nodi
 end
 
 % make undirected the graph 
-A = A + A.';
+A = A + A';
 A(A == 2) = 1;
 
 G = gsp_graph(A,[x_coord y_coord]);
@@ -48,14 +48,15 @@ figure;gsp_plot_graph(G);title('Grafo delle province');
 init = 670; % 2021-12-23
 interest = 700; % 2022-01-22
 
-init_cases = data_filt((init-1) * num_nodi + 1:init*num_nodi,:).totale_casi;
+init_cases = data_filt((init-1) * num_nodi + 1:init*num_nodi,:);
+max_cases = data_filt((interest-1) * num_nodi + 1:interest*num_nodi,:);
+interest_cases = max_cases;
+interest_cases.totale_casi = (interest_cases.totale_casi - init_cases.totale_casi) ./ pop.popolazione * 100;
 
-s = data_filt((interest-1) * num_nodi + 1:interest*num_nodi,:).totale_casi;
-s = s - init_cases;
-s = s ./ pop.popolazione * 100;
+s = interest_cases.totale_casi;
 
 param.climits = [0,13];
-figure;gsp_plot_signal(G,s,param);title('Variazione casi');
+figure;gsp_plot_signal(G,s,param);title('Infetti totali fino al giorno massimo');
 
 %% computation Laplacian Eigenvectors Eigenvalues
 
@@ -68,7 +69,7 @@ U(abs(U) < tol) = 0;
 v(abs(v) < tol) = 0;
 %% computation Frequency Profile on Graph (GFT)
 
-f = U.' * s;
+f = U' * s;
 f_mod = sqrt(f.^2);
 figure;plot(v,f_mod,'r.-');
 xlabel('eigenvalues');ylabel('coefficient');
@@ -76,12 +77,12 @@ title('Graph Frequency profile');
 
 %% filtering
 
-numb_filt = 20;
+numb_filt = 55;
 h = [ones(num_nodi-numb_filt,1) ; zeros(numb_filt,1)];
 
 %% direct computation of H from eigenvectors
 
-s_filt = U * diag(h) * U.' * s;
+s_filt = U * diag(h) * U' * s;
 
 xlabel('nodi');ylabel('infetti');
 figure;gsp_plot_signal(G,s_filt,param);title('Totale nuovi casi filtrati');
@@ -99,7 +100,7 @@ for i = 0:p
     V(:,i+1) = v.^i;
 end
 
-alpha = ((V.'*V) \ V.') * h;
+alpha = ((V'*V) \ V') * h;
 H = zeros(num_nodi);
 
 for i = 0:p
@@ -122,7 +123,7 @@ for i = 0:p
     V(:,i+1) = v.^i;
 end
 
-alpha = ((V.'*V) \ V.') * h;
+alpha = ((V'*V) \ V') * h;
 z_i = s;
 s_filt2 = zeros(num_nodi,1);
 I = eye(num_nodi);
@@ -153,32 +154,39 @@ figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro appro
 
 %% sampling and reconstruction
 
-ds = ones(length(s),1);
-freq_camp = 80;
-
-for i = 1:num_nodi
-    if (mod(i,freq_camp) == 0)
-        ds(i) = 0;
-    end
-end
+% tablenuova = groupfilter(interest_cases,'denominazione_regione',@(x) ismember(x,maxk(x,int16(length(x)/2))))
+ds = [0,0,1,1,1,0,1,1,1,0,0,1,0,1,0,1,0,1,1,1,1,0,0,1,0,1,0,0,1,0,0,1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,1,1,1,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,0,1,1,1,0,0,1,0,1,0,1,1,1,0,1,1,0,0,0,1,0,1,1,1,0,1,0,1,0];
 
 s_camp = diag(ds)*s_filt;
-
+figure;gsp_plot_signal(G,s_camp);title('Totale nuovi casi filtrati filtro approssimato')
 Ef = diag(h);
-Bf = U*Ef*U.';
-
-e = eig(Bf*diag(ds)*Bf);
-e(abs(e) < tol) = 0;
-if(max(e) - 1 < tol*10)
-    disp("signal on graph is both vertex and frequency limited")
-end
+Bf = U*Ef*U';
 
 % Sampling Theorem
 
 cDs = I - diag(ds);
 
-eigv = eig(cDs*Bf);
-sqrt(max(eigv))
+sv = svds(cDs*Bf,1,'largest');
+disp("largest singular value: " + string(sv))
+Pf = zeros(num_nodi-numb_filt, length(s));
+
+j = 1;
+for i = 1:length(h)
+    if(h(i) == 1)
+        Pf(j,i) = 1;
+        j = j + 1;
+    end
+end
+Uf = U*Pf';
+s_interp = Uf*((Uf'*diag(ds)*Uf)\Uf')*s_camp;
+sum(abs(s_filt - s_interp))
+figure;gsp_plot_signal(G,s_interp);title('Totale nuovi casi filtrati filtro approssimato')
+difference = s - s_interp;
+figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale campionato/ricostruto e segnale originale');
+errore_medio = (abs(s-s_interp)./s)*100;
+[v,idx] = maxk(errore_medio,10);
+v
+interest_cases(idx,:).denominazione_provincia
 
 
 
