@@ -83,9 +83,14 @@ h = [ones(num_nodi-numb_filt,1) ; zeros(numb_filt,1)];
 %% direct computation of H from eigenvectors
 
 s_filt = U * diag(h) * U' * s;
+f = U' * s_filt;
+f_mod = sqrt(f.^2);
+figure;plot(v,f_mod,'r.-');
+xlabel('eigenvalues');ylabel('coefficient');
+title('Graph Frequency profile');
 
-xlabel('nodi');ylabel('infetti');
-figure;gsp_plot_signal(G,s_filt,param);title('Totale nuovi casi filtrati');
+figure;
+gsp_plot_signal(G,s_filt,param);title('Totale nuovi casi filtrati');
 
 difference = s - s_filt;
 figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale filtrato e non filtrato');
