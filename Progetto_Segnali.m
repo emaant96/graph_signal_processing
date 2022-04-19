@@ -2,6 +2,7 @@
 clear
 clc
 tol = 1e-15;
+tol2 = 1e-7;
 % RAW_REF url = 'https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv';
 % REF https://github.com/pcm-dpc/COVID-19/blob/master/dati-province/dpc-covid19-ita-province-latest.csv
 run gspbox/gsp_start
@@ -39,7 +40,7 @@ end
 % make undirected the graph 
 A = A + A';
 A(A == 2) = 1;
-
+I = eye(num_nodi);
 G = gsp_graph(A,[x_coord y_coord]);
 figure;gsp_plot_graph(G);title('Grafo delle province');
 
@@ -55,7 +56,7 @@ interest_cases.totale_casi = (interest_cases.totale_casi - init_cases.totale_cas
 
 s = interest_cases.totale_casi;
 
-param.climits = [0,13];
+param.climits = [0,max(s)];
 figure;gsp_plot_signal(G,s,param);title('Infetti totali fino al giorno massimo');
 
 %% computation Laplacian Eigenvectors Eigenvalues
@@ -65,8 +66,6 @@ L = diag(d) - A;
 
 [U,v] = eig(L);
 v = diag(v);
-U(abs(U) < tol) = 0;
-v(abs(v) < tol) = 0;
 %% computation Frequency Profile on Graph (GFT)
 
 f = U' * s;
@@ -77,7 +76,7 @@ title('Graph Frequency profile');
 
 %% filtering
 
-numb_filt = 60;
+numb_filt = 65;
 h = [ones(num_nodi-numb_filt,1) ; zeros(numb_filt,1)];
 
 %% direct computation of H from eigenvectors
@@ -97,15 +96,15 @@ figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale fi
 
 %% approximation with Eigenvalues and Laplacian
 tic
-p = 6;
+p = 16;
 
 V = zeros(num_nodi,p + 1);
 
 for i = 0:p
     V(:,i+1) = v.^i;
 end
-
-alpha = ((V'*V) \ V') * h;
+V = vpa(V);
+alpha = pinv(V) * h;
 H = zeros(num_nodi);
 
 for i = 0:p
@@ -116,7 +115,6 @@ s_filt1 = H * s;
 toc
 error = sum(abs(s_filt1 - s_filt));
 disp("error computation approximated of filter with Laplacian Matrix powers: " + string(error))
-figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% simulation of distribuited computation of approximated filter H
 tic
@@ -127,10 +125,11 @@ for i = 0:p
     V(:,i+1) = v.^i;
 end
 
-alpha = ((V'*V) \ V') * h;
+V = vpa(V);
+
+alpha = pinv(V) * h;
 z_i = s;
 s_filt2 = zeros(num_nodi,1);
-I = eye(num_nodi);
 
 for n = 1:length(alpha)
     z_temp = z_i;
@@ -153,8 +152,11 @@ end
 toc
 
 error = sum(abs(s_filt2 - s_filt));
+
 disp("error distribuited calc approximation of filter: " + string(error))
-figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro approssimato')
+
+param.climits = [0,max(s)];
+figure;gsp_plot_signal(G,s_filt2,param);title('Totale nuovi casi filtrati filtro approssimato')
 
 %% sampling and reconstruction
 
@@ -162,7 +164,8 @@ figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro appro
 ds = [0,0,1,1,1,0,1,1,1,0,0,1,0,1,0,1,0,1,1,1,1,0,0,1,0,1,0,0,1,0,0,1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,1,1,1,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,0,1,1,1,0,0,1,0,1,0,1,1,1,0,1,1,0,0,0,1,0,1,1,1,0,1,0,1,0];
 
 s_camp = diag(ds)*s_filt;
-figure;gsp_plot_signal(G,s_camp);title('Totale nuovi casi filtrati filtro approssimato')
+param.climits = [0,max(s)];
+figure;gsp_plot_signal(G,s_camp,param);title('Totale nuovi casi campionati')
 Ef = diag(h);
 Bf = U*Ef*U';
 
@@ -185,24 +188,26 @@ Uf = U*Pf';
 s_interp = Uf*((Uf'*diag(ds)*Uf)\Uf')*s_camp;
 error = sum(abs(s_filt - s_interp));
 disp("error interpolation pseudoinverse approch: " + string(error))
+
 %% iterative version
 
 s_interp1 = s_camp;
-for p = 1:100000
+error = zeros(100,1);
+for p = 1:100
     s_interp1 = s_camp + cDs*Bf*s_interp1;
+    error(p) = sum(abs(s_filt - s_interp1));
 end
-error = sum(abs(s_filt - s_interp1));
-disp("error interpolation iterative version algoritm approximation: " + string(error))
+plot(error)
+disp("error interpolation iterative version algoritm approximation: " + string(error(100)))
+
 %% reconstruction with eigenvector and eigenvalue of BDB
 
 [U1,v1] = eig(Bf*diag(ds)*Bf);
 v1 = diag(v1);
-U1(abs(U1) < tol*100000000) = 0;
-v1(abs(v1) < tol*100000000) = 0;
 s_interp2 = zeros(length(s),1);
 
 for i = 1:length(v1)
-    if(v1(i) ~= 0)
+    if(v1(i) > tol2)
         s_interp2 = s_interp2 + (s_camp'*U1(:,i)/v1(i))*U1(:,i);
     end
 end
@@ -211,13 +216,20 @@ error = sum(abs(s_filt - s_interp2));
 disp("error interpolation eigenvector and eigenvalue of BDB approximation: " + string(error))
 
 %% print error for privinces
-figure;gsp_plot_signal(G,s_interp);title('Totale nuovi casi filtrati filtro approssimato')
+figure;gsp_plot_signal(G,s_interp,param);title('Totale nuovi casi segnale ricostruito')
 difference = s - s_interp;
 figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale campionato/ricostruto e segnale originale');
-errore_medio = abs(s-s_interp);
-[v,idx] = maxk(errore_medio,10);
-v
+errore = abs(s-s_interp);
+[err_prov,idx] = maxk(errore,10);
+err_prov
 interest_cases(idx,:).denominazione_provincia
 
+%% sampling with adaptive matrix
 
-
+cvx_begin
+    variable w(102)
+    minimize(lambda_sum_largest(Uf'*diag(w)*Uf,37))
+    subject to
+    norm(w,1) <= 60
+    zeros(102,1) <= w <= ones(102,1)
+cvx_end
