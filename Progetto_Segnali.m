@@ -120,8 +120,7 @@ figure;gsp_plot_signal(G,s_filt1);title('Totale nuovi casi filtrati filtro appro
 
 %% simulation of distribuited computation of approximated filter H
 tic
-p = 6;
-
+p = 16;
 V = zeros(num_nodi,p + 1);
 
 for i = 0:p
