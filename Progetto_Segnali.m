@@ -1,12 +1,21 @@
 
 clear
 clc
-tol = 1e-15;
-tol2 = 1e-7;
-% RAW_REF url = 'https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv';
-% REF https://github.com/pcm-dpc/COVID-19/blob/master/dati-province/dpc-covid19-ita-province-latest.csv
+
 run gspbox/gsp_start
 
+tol = 1e-15;
+tol2 = 1e-7;
+% RAW_REF 'https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv';
+% REF 'https://github.com/pcm-dpc/COVID-19/blob/master/dati-province/dpc-covid19-ita-province-latest.csv';
+% RAW_REF_TOT 'https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale.csv'
+data_tot = readtable('data/dati_nazionali.csv');
+date = datetime(2020,02,24) : datetime(2022,04,20);
+figure;plot(date,data_tot.totale_positivi);
+ylabel('totale positivi');
+title('Andamento Covid in Italia');
+
+%%
 data = readtable('data/data.csv');
 pop = readtable('data/popolazione_province_connesso.csv');
 num_nodi = length(pop.popolazione);
@@ -46,8 +55,8 @@ figure;gsp_plot_graph(G);title('Grafo delle province');
 
 %% graph and signal
 
-init = 670; % 2021-12-23
-interest = 700; % 2022-01-22
+init = 670; % giorno 2021-12-23 670
+interest = 700; % giorno 2022-01-22 700
 
 init_cases = data_filt((init-1) * num_nodi + 1:init*num_nodi,:);
 max_cases = data_filt((interest-1) * num_nodi + 1:interest*num_nodi,:);
@@ -57,7 +66,7 @@ interest_cases.totale_casi = (interest_cases.totale_casi - init_cases.totale_cas
 s = interest_cases.totale_casi;
 
 param.climits = [0,max(s)];
-figure;gsp_plot_signal(G,s,param);title('Infetti totali fino al giorno massimo');
+figure;gsp_plot_signal(G,s,param);title('Nuovi casi covid dal 23/12 al 01/22 (%pop)');
 
 %% computation Laplacian Eigenvectors Eigenvalues
 
@@ -76,8 +85,8 @@ title('Graph Frequency profile');
 
 %% filtering
 
-numb_filt = 65;
-h = [ones(num_nodi-numb_filt,1) ; zeros(numb_filt,1)];
+num_freq = 47;
+h = [ones(num_freq,1) ; zeros(num_nodi - num_freq,1)];
 
 %% direct computation of H from eigenvectors
 
@@ -89,34 +98,17 @@ xlabel('eigenvalues');ylabel('coefficient');
 title('Graph Frequency profile');
 
 figure;
-gsp_plot_signal(G,s_filt,param);title('Totale nuovi casi filtrati');
+gsp_plot_signal(G,s_filt,param);title('Grafo infetti filtrati');
 
 difference = s - s_filt;
-figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale filtrato e non filtrato');
+param1.bar = 1;
+param1.bar_width = 3;
+figure;
+gsp_plot_signal(G,difference,param1);
+figure;
+stem(1:1:102,difference,'filled');ylim([-max(s)/5,max(s)/5]);title('Differenza segnale filtrato e non filtrato');
 
-%% approximation with Eigenvalues and Laplacian
-tic
-p = 16;
-
-V = zeros(num_nodi,p + 1);
-
-for i = 0:p
-    V(:,i+1) = v.^i;
-end
-V = vpa(V);
-alpha = pinv(V) * h;
-H = zeros(num_nodi);
-
-for i = 0:p
-    H = H + alpha(i+1)*L^i;
-end
-
-s_filt1 = H * s;
-toc
-error = sum(abs(s_filt1 - s_filt));
-disp("error computation approximated of filter with Laplacian Matrix powers: " + string(error))
-
-%% simulation of distribuited computation of approximated filter H
+%% simulation of distribuited computation of approximated filter H with Eigenvalues and Laplacian
 tic
 p = 16;
 V = zeros(num_nodi,p + 1);
@@ -151,7 +143,7 @@ for n = 1:length(alpha)
 end
 toc
 
-error = sum(abs(s_filt2 - s_filt));
+error = mse(s_filt2 - s_filt);
 
 disp("error distribuited calc approximation of filter: " + string(error))
 
@@ -160,9 +152,8 @@ figure;gsp_plot_signal(G,s_filt2,param);title('Totale nuovi casi filtrati filtro
 
 %% sampling and reconstruction
 
-% tablenuova = groupfilter(interest_cases,'denominazione_regione',@(x) ismember(x,maxk(x,int16(length(x)/2))))
 ds = [0,0,1,1,1,0,1,1,1,0,0,1,0,1,0,1,0,1,1,1,1,0,0,1,0,1,0,0,1,0,0,1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,1,1,1,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,0,1,1,1,0,0,1,0,1,0,1,1,1,0,1,1,0,0,0,1,0,1,1,1,0,1,0,1,0];
-
+nodi_considerati = sum(ds)
 s_camp = diag(ds)*s_filt;
 param.climits = [0,max(s)];
 figure;gsp_plot_signal(G,s_camp,param);title('Totale nuovi casi campionati')
@@ -173,10 +164,10 @@ Bf = U*Ef*U';
 
 cDs = I - diag(ds);
 
-sv = svds(cDs*Bf,1,'largest');
+sv = sqrt(max(eig(vpa(cDs*Bf))));
 disp("largest singular value: " + string(sv))
-Pf = zeros(num_nodi-numb_filt, length(s));
 
+Pf = zeros(num_freq, length(s));
 j = 1;
 for i = 1:length(h)
     if(h(i) == 1)
@@ -185,9 +176,14 @@ for i = 1:length(h)
     end
 end
 Uf = U*Pf';
+
 s_interp = Uf*((Uf'*diag(ds)*Uf)\Uf')*s_camp;
+error = mse(s_filt - s_interp);
+disp("error interpolation PsUf pseudoinverse approch: " + string(error))
+
+s_interp = (I - cDs*Bf)\s_camp;
 error = sum(abs(s_filt - s_interp));
-disp("error interpolation pseudoinverse approch: " + string(error))
+disp("error interpolation Q approch: " + string(error))
 
 %% iterative version
 
@@ -195,10 +191,10 @@ s_interp1 = s_camp;
 error = zeros(100,1);
 for p = 1:100
     s_interp1 = s_camp + cDs*Bf*s_interp1;
-    error(p) = sum(abs(s_filt - s_interp1));
+    error(p) = mse(s_filt - s_interp1);
 end
-plot(error)
-disp("error interpolation iterative version algoritm approximation: " + string(error(100)))
+figure;plot(error);xlabel('iteration');ylabel('MSE');
+disp("error interpolation iterative version algoritm approximation: " + string(error(length(error))))
 
 %% reconstruction with eigenvector and eigenvalue of BDB
 
@@ -206,30 +202,22 @@ disp("error interpolation iterative version algoritm approximation: " + string(e
 v1 = diag(v1);
 s_interp2 = zeros(length(s),1);
 
-for i = 1:length(v1)
-    if(v1(i) > tol2)
-        s_interp2 = s_interp2 + (s_camp'*U1(:,i)/v1(i))*U1(:,i);
-    end
+for i = 1:45
+    s_interp2 = s_interp2 + (s_camp'*U1(:,i)/v1(i))*U1(:,i);
 end
 
-error = sum(abs(s_filt - s_interp2));
+error = mse(s_filt - s_interp2);
 disp("error interpolation eigenvector and eigenvalue of BDB approximation: " + string(error))
 
 %% print error for privinces
 figure;gsp_plot_signal(G,s_interp,param);title('Totale nuovi casi segnale ricostruito')
 difference = s - s_interp;
 figure;plot(difference,'g-');ylim([-max(s),max(s)]);title('Differenza segnale campionato/ricostruto e segnale originale');
-errore = abs(s-s_interp);
+
+
+errore = abs(s - s_interp);
 [err_prov,idx] = maxk(errore,10);
 err_prov
 interest_cases(idx,:).denominazione_provincia
 
-%% sampling with adaptive matrix
 
-cvx_begin
-    variable w(102)
-    minimize(lambda_sum_largest(Uf'*diag(w)*Uf,37))
-    subject to
-    norm(w,1) <= 60
-    zeros(102,1) <= w <= ones(102,1)
-cvx_end
